@@ -14,6 +14,7 @@ class MainActivity : AppCompatActivity(), ClusterListener {
     private lateinit var map: Map
     private lateinit var clustersCollection: ClusterizedPlacemarkCollection
     private val points = mutableMapOf<Point, Boolean>()
+    private val mapObjectsPoints = mutableMapOf<PlacemarkMapObject, Point>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         MapKitFactory.setApiKey("379478c8-b152-486f-ba05-659b7dd607a9")
@@ -46,22 +47,51 @@ class MainActivity : AppCompatActivity(), ClusterListener {
     }
 
     private fun setupClusters() {
-        clustersCollection = map.mapObjects.addClusterizedPlacemarkCollection(this)
-        clustersCollection.addPlacemarks(points.keys.toList(), ImageProvider.fromResource(this, R.drawable.ic_pin_filter_gray), IconStyle())
-        /*val temp: List<PlacemarkMapObject> = clustersCollection.addEmptyPlacemarks(points.keys.toList())
-        temp.forEach { placeMark ->
-            placeMark.setIcon(ImageProvider.fromResource(this, R.drawable.ic_pin_filter_blue)) {
-                if (points.contains(placeMark.geometry)) {
-                    if (points[placeMark.geometry] == true) {
-                        placeMark.setIcon(ImageProvider.fromResource(this, R.drawable.ic_pin_filter_gray))
-                    } else {
-                        placeMark.setIcon(ImageProvider.fromResource(this, R.drawable.ic_pin_filter_blue))
-                    }
-                    points[placeMark.geometry] = points[placeMark.geometry]?.not() ?: false
-                }
-            }
-        }*/
-        clustersCollection.clusterPlacemarks(60.0, 15)
+        //clustersCollection = map.mapObjects.addClusterizedPlacemarkCollection(this)
+        points.keys.forEach {
+            val mapObject = map.mapObjects.addPlacemark(
+                it,
+                ImageProvider.fromResource(this, R.drawable.ic_pin_filter_gray)
+            )
+            mapObjectsPoints[mapObject] = it
+            mapObject.addTapListener(tapListener)
+        }
+        /*clustersCollection.addPlacemarks(
+            points.keys.map { it },
+            ImageProvider.fromResource(this, R.drawable.ic_pin_filter_gray),
+            IconStyle())
+        clustersCollection.clusterPlacemarks(60.0, 15)*/
+    }
+
+    private val tapListener = MapObjectTapListener { mapObject, _ ->
+        val p = mapObjectsPoints[mapObject]
+        p?.let { point ->
+            handleTap(mapObject, point)
+        }
+        return@MapObjectTapListener true
+    }
+
+    private fun handleTap(mapObject: MapObject, point: Point) {
+        val searchResult = points[point] == true
+        map.mapObjects.remove(mapObject)
+        mapObjectsPoints.remove(mapObject)
+        if (searchResult) {
+            points[point] = false
+            val mp = map.mapObjects.addPlacemark(
+                point,
+                ImageProvider.fromResource(this, R.drawable.ic_pin_filter_gray)
+            )
+            mapObjectsPoints[mp] = point
+            mp.addTapListener(tapListener)
+        } else {
+            points[point] = true
+            val mp = map.mapObjects.addPlacemark(
+                point,
+                ImageProvider.fromResource(this, R.drawable.ic_pin_filter_blue)
+            )
+            mapObjectsPoints[mp] = point
+            mp.addTapListener(tapListener)
+        }
     }
 
     override fun onStart() {
