@@ -31,6 +31,9 @@ class PharmacyPlaceMark(
     }
 
     override fun getId(): String {
+        /**
+         *
+         */
         return UUID.randomUUID().toString()
     }
 

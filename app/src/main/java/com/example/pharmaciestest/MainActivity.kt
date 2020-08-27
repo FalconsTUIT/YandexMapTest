@@ -1,98 +1,105 @@
 package com.example.pharmaciestest
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Bundle
+import android.os.Looper
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.yandex.mapkit.MapKitFactory
-import com.yandex.mapkit.geometry.Point
-import com.yandex.mapkit.map.*
-import com.yandex.mapkit.map.Map
+import androidx.core.app.ActivityCompat
+import com.google.android.gms.location.*
 import kotlinx.android.synthetic.main.activity_main.*
 
-class MainActivity : AppCompatActivity(), ClusterListener {
+class MainActivity : AppCompatActivity() {
 
-    private lateinit var map: Map
-    private lateinit var clustersCollection: ClusterizedPlacemarkCollection
-    private val points = mutableMapOf<Point, Boolean>()
-    private val mapObjectsPoints = mutableMapOf<PlacemarkMapObject, Point>()
-    private lateinit var grayPlaceMark: PharmacyPlaceMark
-    private lateinit var bluePlaceMark: PharmacyPlaceMark
+    private lateinit var mFusedLocationClient: FusedLocationProviderClient
+    private lateinit var mLocationRequest: LocationRequest
+    private lateinit var mLocationCallback: LocationCallback
+    private lateinit var mLocationManager: LocationManager
+    private lateinit var mSettingsClient: SettingsClient
+    private lateinit var mLocationSettingRequest: LocationSettingsRequest
+    private var isGpsEnable = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        MapKitFactory.setApiKey("379478c8-b152-486f-ba05-659b7dd607a9")
-        MapKitFactory.initialize(this)
-
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        setupPlaceMarks()
-        setupPoints()
-        setupMap()
-        setupClusters()
-    }
+        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
-    private fun setupPlaceMarks() {
-        grayPlaceMark = PharmacyPlaceMark(this, PharmacyPlaceMark.PlaceMarkColors.GRAY)
-        bluePlaceMark = PharmacyPlaceMark(this, PharmacyPlaceMark.PlaceMarkColors.BLUE)
-    }
+        mSettingsClient = LocationServices.getSettingsClient(this)
 
-    private fun setupPoints() {
-        PointsGenerator.getPoints().forEach {
-            points[it] = false
+        mLocationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+        mLocationRequest = LocationRequest.create().apply {
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+            interval = LOCATION_REQUEST_INTERVAL
+            fastestInterval = LOCATION_REQUEST_FASTEST_INTERVAL
+        }
+
+        mLocationSettingRequest =
+            LocationSettingsRequest
+                .Builder()
+                .addLocationRequest(mLocationRequest)
+                .build()
+
+        mLocationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult?) {
+                super.onLocationResult(locationResult)
+                locationResult?.let {
+                    tvCoordinates.text =
+                        Pair(it.lastLocation.latitude, it.lastLocation.longitude).toString()
+                }
+            }
+        }
+
+        btnGetCoordinates.setOnClickListener {
+            if (isGpsEnable) {
+                getLocation()
+            } else {
+                Toast.makeText(this, "GPS in not enable", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
-    private fun setupMap() {
-        map = map_view.map
-        map.move(
-            CameraPosition(
-                points.keys.first(),
-                15f,
-                0f,
-                0f
+    private fun getLocation() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this@MainActivity,
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ),
+                1000
             )
-        )
-    }
-
-    private fun setupClusters() {
-        clustersCollection = map.mapObjects.addClusterizedPlacemarkCollection(this)
-        points.keys.forEach {
-            val mapObject = clustersCollection.addPlacemark(it, grayPlaceMark)
-            mapObjectsPoints[mapObject] = it
-            mapObject.addTapListener(tapListener)
-        }
-        clustersCollection.clusterPlacemarks(60.0, 15)
-    }
-
-    private val tapListener = MapObjectTapListener { mapObject, _ ->
-        val p = mapObjectsPoints[mapObject]
-        p?.let { point ->
-            handleTap(mapObject, point)
-        }
-        return@MapObjectTapListener true
-    }
-
-    private fun handleTap(mapObject: MapObject, point: Point) {
-        val placeMarkMapObject = mapObject as PlacemarkMapObject
-        val isSelectedObject = points[point] == true
-        points[point] = !isSelectedObject
-        if (isSelectedObject) {
-            placeMarkMapObject.setIcon(grayPlaceMark)
         } else {
-            placeMarkMapObject.setIcon(bluePlaceMark)
+            mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback, Looper.getMainLooper())
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        MapKitFactory.getInstance().onStart()
+    @SuppressLint("MissingPermission")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            1000 -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback, null)
+                } else {
+                    Toast.makeText(this, "Permission denied", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
-    override fun onStop() {
-        super.onStop()
-        MapKitFactory.getInstance().onStop()
-    }
-
-    override fun onClusterAdded(cluster: Cluster) {
-        cluster.appearance.setIcon(ClusterImage(cluster.size.toString(), this))
+    companion object {
+        private const val LOCATION_REQUEST_INTERVAL: Long = 10 * 1000
+        private const val LOCATION_REQUEST_FASTEST_INTERVAL: Long = 5 * 1000
     }
 }
